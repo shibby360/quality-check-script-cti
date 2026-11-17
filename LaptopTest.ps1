@@ -219,7 +219,7 @@ $speakerPass = Prompt-UserCheck -testName "Speakers Test (Did audio sound clear?
 
 # --- MICROPHONE TEST ---
 Write-Host "`nOpening Microphone Test in Browser..." -ForegroundColor Yellow
-Open-WebLink -url "https://mictests.com/"
+tart-Process "msedge.exe" -ArgumentList "--app=`"$((Get-Item 'mic-test-offline.html').FullName)`""
 $micPass = Prompt-UserCheck -testName "Microphone Test (Did microphone capture audio cleanly?)"
 
 # --- CAMERA TEST ---

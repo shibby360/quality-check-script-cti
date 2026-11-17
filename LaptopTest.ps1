@@ -219,7 +219,7 @@ $speakerPass = Prompt-UserCheck -testName "Speakers Test (Did audio sound clear?
 
 # --- MICROPHONE TEST ---
 Write-Host "`nOpening Microphone Test in Browser..." -ForegroundColor Yellow
-tart-Process "msedge.exe" -ArgumentList "--app=`"$((Get-Item 'mic-test-offline.html').FullName)`""
+Start-Process "msedge.exe" -ArgumentList "--app=`"$((Get-Item 'mic-test-offline.html').FullName)`""
 $micPass = Prompt-UserCheck -testName "Microphone Test (Did microphone capture audio cleanly?)"
 
 # --- CAMERA TEST ---
@@ -233,7 +233,7 @@ $cameraPass = Prompt-UserCheck -testName "Camera Test (Did photo and video captu
 
 # --- KEYBOARD TEST ---
 Write-Host "`nOpening Keyboard Test in Browser..." -ForegroundColor Yellow
-Open-WebLink -url "https://key-test.com/"
+Start-Process "msedge.exe" -ArgumentList "--app=`"$((Get-Item 'keyboard-tester.html').FullName)`""
 $keyboardPass = Prompt-UserCheck -testName "Keyboard Test (Did all keys respond?)"
 
 # --- MANUAL PORT & HARDWARE CHECKS ---

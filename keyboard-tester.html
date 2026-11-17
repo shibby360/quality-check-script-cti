@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Keyboard Tester</title>
+<style>
+  :root { --u: 46px; --bg:#14161a; --key:#2a2e36; --keyb:#3a3f4a; --txt:#cfd4dc; --down:#3fb950; --seen:#1f6feb; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:14px/1.4 system-ui,sans-serif; display:flex; flex-direction:column; align-items:center; padding:24px; }
+  h1 { font-size:22px; font-weight:600; margin:0 0 20px; }
+  .kbd { display:flex; gap:calc(var(--u)*.4); overflow-x:auto; max-width:100%; padding-bottom:8px; }
+  .row { display:flex; }
+  .gap-row { height:calc(var(--u)*.5); }
+  .grid { display:grid; grid-auto-rows:var(--u); grid-template-rows:var(--u) calc(var(--u)*.5) repeat(5,var(--u)); }
+  .key { width:calc(var(--u)*var(--w,1) - 4px); height:calc(var(--u)*var(--h,1) - 4px); margin:0 4px 4px 0;
+         background:var(--key); border:1px solid var(--keyb); border-radius:5px; display:flex; align-items:center; justify-content:center;
+         font-size:12px; user-select:none; transition:background .06s; }
+  .key.seen { background:var(--seen); color:#fff; border-color:var(--seen); }
+  .key.down { background:var(--down); color:#000; border-color:var(--down); }
+  .spacer { height:1px; flex:none; }
+  .keylog { margin-top:16px; width:100%; max-width:900px; min-height:34px; display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { background:var(--key); border:1px solid var(--keyb); border-radius:4px; padding:2px 8px; font-size:12px; }
+  .stats { display:flex; gap:12px; margin-top:16px; flex-wrap:wrap; justify-content:center; }
+  .stat { background:var(--key); border:1px solid var(--keyb); border-radius:8px; padding:10px 18px; min-width:150px; text-align:center; }
+  .stat b { display:block; font-size:11px; letter-spacing:.05em; opacity:.7; font-weight:500; }
+  .stat span { font-size:22px; font-variant-numeric:tabular-nums; }
+  button { margin-top:16px; background:none; color:var(--txt); border:1px solid var(--keyb); border-radius:6px; padding:8px 28px; cursor:pointer; font:inherit; letter-spacing:.08em; }
+  button:hover { background:var(--key); }
+</style>
+</head>
+<body>
+<h1>Keyboard Tester</h1>
+
+<div class="kbd" id="kbd"></div>
+<div class="keylog" id="log"></div>
+
+<button id="reset" type="button">RESET</button>
+
+<script>
+(() => {
+  // ---------- Layout ----------
+  const K = (code, label, w = 1) => ({ code, label, w });
+  const S = w => ({ gap: w });
+  const letters = s => [...s].map(c => K('Key' + c, c));
+  const fkeys = (a, b) => { const r = []; for (let n = a; n <= b; n++) r.push(K('F' + n, 'F' + n)); return r; };
+
+  const mainRows = [
+    [K('Escape','Esc'), S(1), ...fkeys(1,4), S(.5), ...fkeys(5,8), S(.5), ...fkeys(9,12)],
+    'gap',
+    [K('Backquote','`'), ...[1,2,3,4,5,6,7,8,9,0].map(n => K('Digit'+n, ''+n)), K('Minus','-'), K('Equal','='), K('Backspace','←',2)],
+    [K('Tab','Tab',1.5), ...letters('QWERTYUIOP'), K('BracketLeft','['), K('BracketRight',']'), K('Backslash','\\',1.5)],
+    [K('CapsLock','Caps Lock',1.75), ...letters('ASDFGHJKL'), K('Semicolon',';'), K('Quote',"'"), K('Enter','Enter',2.25)],
+    [K('ShiftLeft','Shift',2.25), ...letters('ZXCVBNM'), K('Comma',','), K('Period','.'), K('Slash','/'), K('ShiftRight','Shift',2.75)],
+    [K('ControlLeft','Ctrl',1.25), K('MetaLeft','Win',1.25), K('AltLeft','Alt',1.25), K('Space','',6.25),
+     K('AltRight','Alt',1.25), K('Fn','Fn',1.25), K('ContextMenu','Menu',1.25), K('ControlRight','Ctrl',1.25)],
+  ];
+
+  // [code, label, col, row, width, height] on a CSS grid
+  const G = (code, label, c, r, w = 1, h = 1) => ({ code, label, c, r, w, h });
+  const navItems = [
+    G('PrintScreen','PrtSc',1,1), G('ScrollLock','ScrLk',2,1), G('Pause','Pause',3,1),
+    G('Insert','Ins',1,3), G('Home','Home',2,3), G('PageUp','PgUp',3,3),
+    G('Delete','Del',1,4), G('End','End',2,4), G('PageDown','PgDn',3,4),
+    G('ArrowUp','↑',2,6), G('ArrowLeft','←',1,7), G('ArrowDown','↓',2,7), G('ArrowRight','→',3,7),
+  ];
+  const numItems = [
+    G('NumLock','NumLk',1,3), G('NumpadDivide','/',2,3), G('NumpadMultiply','*',3,3), G('NumpadSubtract','-',4,3),
+    G('Numpad7','7',1,4), G('Numpad8','8',2,4), G('Numpad9','9',3,4), G('NumpadAdd','+',4,4,1,2),
+    G('Numpad4','4',1,5), G('Numpad5','5',2,5), G('Numpad6','6',3,5),
+    G('Numpad1','1',1,6), G('Numpad2','2',2,6), G('Numpad3','3',3,6), G('NumpadEnter','Enter',4,6,1,2),
+    G('Numpad0','0',1,7,2), G('NumpadDecimal','.',3,7),
+  ];
+
+  // ---------- Render ----------
+  const els = {};
+  const mk = (it, extra = '') => {
+    const d = document.createElement('div');
+    d.className = 'key';
+    d.textContent = it.label;
+    d.style.setProperty('--w', it.w);
+    if (it.h) d.style.setProperty('--h', it.h);
+    if (extra) d.style.cssText += extra;
+    els[it.code] = d;
+    return d;
+  };
+  const kbd = document.getElementById('kbd');
+
+  const main = document.createElement('div');
+  mainRows.forEach(r => {
+    if (r === 'gap') { const g = document.createElement('div'); g.className = 'gap-row'; main.append(g); return; }
+    const row = document.createElement('div'); row.className = 'row';
+    r.forEach(it => {
+      if (it.gap) { const s = document.createElement('div'); s.className = 'spacer'; s.style.width = `calc(var(--u)*${it.gap})`; row.append(s); }
+      else row.append(mk(it));
+    });
+    main.append(row);
+  });
+
+  const grid = (items, cols) => {
+    const g = document.createElement('div');
+    g.className = 'grid';
+    g.style.gridTemplateColumns = `repeat(${cols}, var(--u))`;
+    items.forEach(it => g.append(mk(it, `grid-column:${it.c} / span ${it.w};grid-row:${it.r} / span ${it.h}`)));
+    return g;
+  };
+  kbd.append(main, grid(navItems, 3), grid(numItems, 4));
+
+  // ---------- State ----------
+  const $ = id => document.getElementById(id);
+  const logEl = $('log');
+  let down, downAt, presses, lastEvtAt, st;
+
+  function init() {
+    down = new Set();
+    downAt = {};        // code -> timeStamp of current keydown
+    presses = [];       // timestamps of keydowns in the last second
+    lastEvtAt = null;   // timestamp of previous key event
+    st = { nkro: 0, apm: 0, roe: null, skr: null };
+    Object.values(els).forEach(e => e.classList.remove('down', 'seen'));
+    logEl.innerHTML = '';
+    render();
+  }
+  const fmt = v => v == null ? 0 : Number(v.toFixed(1));
+  function render() {
+    $('nkro').textContent = st.nkro;
+    $('apm').textContent = st.apm;
+    $('roe').textContent = fmt(st.roe);
+    $('skr').textContent = fmt(st.skr);
+  }
+  const minOf = (cur, v) => (cur == null || v < cur) ? v : cur;
+
+  function addLog(e) {
+    const c = document.createElement('div');
+    c.className = 'chip';
+    c.textContent = `${e.key === ' ' ? 'Space' : e.key} · ${codeOf(e)}`;
+    logEl.prepend(c);
+    while (logEl.children.length > 24) logEl.lastChild.remove();
+  }
+
+  // ---------- Events ----------
+  // Most keyboards handle Fn in firmware and never send it. When one does, browsers
+  // report it as code "Fn" or key "Fn" (some give code "" or "Unidentified"), so normalize.
+  const codeOf = e => (e.code === 'Fn' || e.key === 'Fn') ? 'Fn' : e.code;
+
+  window.addEventListener('keydown', e => {
+    e.preventDefault();
+    if (e.repeat) return;               // ignore OS auto-repeat: not a real physical press
+    const t = e.timeStamp, code = codeOf(e);
+
+    down.add(code);
+    downAt[code] = t;
+    st.nkro = Math.max(st.nkro, down.size);
+
+    presses.push(t);
+    while (presses.length && presses[0] < t - 1000) presses.shift();
+    st.apm = Math.max(st.apm, presses.length * 60);
+
+    if (lastEvtAt != null) { const d = t - lastEvtAt; if (d > 0) st.roe = minOf(st.roe, d); }
+    lastEvtAt = t;
+
+    const el = els[code];
+    if (el) { el.classList.add('down', 'seen'); }
+    addLog(e);
+    render();
+  }, true);
+
+  window.addEventListener('keyup', e => {
+    e.preventDefault();
+    const t = e.timeStamp, code = codeOf(e);
+
+    if (code in downAt) {               // PrintScreen etc. may produce keyup with no keydown
+      const d = t - downAt[code];
+      if (d > 0) st.skr = minOf(st.skr, d);
+      delete downAt[code];
+    } else if (els[code]) {
+      els[code].classList.add('seen');
+      addLog(e);
+    }
+    down.delete(code);
+
+    if (lastEvtAt != null) { const d = t - lastEvtAt; if (d > 0) st.roe = minOf(st.roe, d); }
+    lastEvtAt = t;
+
+    if (els[code]) els[code].classList.remove('down');
+    render();
+  }, true);
+
+  // Window lost focus -> keyups never arrive; clear held keys so nothing sticks
+  window.addEventListener('blur', () => {
+    down.clear(); downAt = {};
+    Object.values(els).forEach(e => e.classList.remove('down'));
+  });
+
+  $('reset').addEventListener('click', e => { init(); e.currentTarget.blur(); });
+  init();
+})();
+</script>
+</body>
+</html>

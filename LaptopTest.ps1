@@ -15,6 +15,7 @@ if (-not $isAdmin) {
 # Dynamically detect USB Directory
 $usbPath = $PSScriptRoot
 if (-not $usbPath) { $usbPath = Get-Location }
+$templatePdf = Join-Path $usbPath "QC_Template.pdf"
 
 # Process DPI Awareness for native resolution detection
 $dpiCode = @"
@@ -34,49 +35,6 @@ Write-Host "       STARTING PORTABLE LAPTOP QUALITY CONTROL & SPEC AUDIT        
 Write-Host "==========================================================================" -ForegroundColor Cyan
 Write-Host "USB Working Directory: $usbPath" -ForegroundColor DarkCyan
 Write-Host ""
-
-# ---------------------------------------------------------
-# 0. RESOLVE & DEPENDENCY LOADER (ITEXTSHARP + BOUNCYCASTLE)
-# ---------------------------------------------------------
-$iTextDll    = Join-Path $usbPath "iTextSharp.dll"
-$bouncyDll   = Join-Path $usbPath "BouncyCastle.Crypto.dll"
-$templatePdf = Join-Path $usbPath "QC_Template.pdf"
-
-if (-not (Test-Path $templatePdf)) {
-    $templatePdf = Join-Path $usbPath "2026-10-27 16_56 (1).pdf"
-}
-
-try {
-    if (Test-Path $bouncyDll) {
-        Unblock-File -Path $bouncyDll -ErrorAction SilentlyContinue
-        [System.Reflection.Assembly]::Load([System.IO.File]::ReadAllBytes($bouncyDll)) | Out-Null
-    }
-    if (Test-Path $iTextDll) {
-        Unblock-File -Path $iTextDll -ErrorAction SilentlyContinue
-        [System.Reflection.Assembly]::Load([System.IO.File]::ReadAllBytes($iTextDll)) | Out-Null
-        Write-Host "[+] Loaded PDF stamping engine into memory successfully." -ForegroundColor Green
-    } else {
-        Write-Error "iTextSharp.dll is missing from USB drive."
-        return
-    }
-} catch {
-    Write-Error "Failed to load assemblies into memory: $_"
-    return
-}
-
-# Helper function to open web links directly in Chrome or Edge
-function Open-WebLink ([string]$url) {
-    $chromePath = "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
-    $chromePathx86 = "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe"
-    
-    if (Test-Path $chromePath) {
-        Start-Process $chromePath -ArgumentList $url
-    } elseif (Test-Path $chromePathx86) {
-        Start-Process $chromePathx86 -ArgumentList $url
-    } else {
-        Start-Process "msedge.exe" -ArgumentList $url
-    }
-}
 
 # Helper function for interactive user test prompts
 function Prompt-UserCheck ([string]$testName) {
@@ -255,6 +213,13 @@ $bluetoothPass   = Prompt-UserCheck -testName "Bluetooth Connection"
 # ---------------------------------------------------------
 Write-Host "`n[4/4] Stamping Text and Checkmarks onto PDF Canvas..." -ForegroundColor Cyan
 
+# Creating dictionary
+$recap = @{}
+pdftk $templatePdf dump_data_fields_utf8 | findstr FieldName | ForEach-Object { 
+	$key = $_ -replace 'FieldName: ', ''
+	$recap[$key] = ""
+}
+
 $timestamp   = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 $desktopPath = [Environment]::GetFolderPath('Desktop')
 $outputPdf   = "$desktopPath\LaptopTest_$timestamp.pdf"
@@ -265,128 +230,128 @@ if (-not (Test-Path $templatePdf)) {
 }
 
 try {
-    $reader = New-Object iTextSharp.text.pdf.PdfReader($templatePdf)
-    $outputStream = [System.IO.File]::Create($outputPdf)
-    $stamper = New-Object iTextSharp.text.pdf.PdfStamper($reader, $outputStream)
-    $canvas = $stamper.GetOverContent(1) # Page 1
-
-    $bfBold = [iTextSharp.text.pdf.BaseFont]::CreateFont([iTextSharp.text.pdf.BaseFont]::HELVETICA_BOLD, [iTextSharp.text.pdf.BaseFont]::CP1252, $false)
-    $bfNorm = [iTextSharp.text.pdf.BaseFont]::CreateFont([iTextSharp.text.pdf.BaseFont]::HELVETICA, [iTextSharp.text.pdf.BaseFont]::CP1252, $false)
-
-    function Write-PdfText ([float]$x, [float]$y, [string]$text, [int]$fontSize=9, [bool]$isBold=$false) {
-        $font = if ($isBold) { $bfBold } else { $bfNorm }
-        $canvas.BeginText()
-        $canvas.SetFontAndSize($font, $fontSize)
-        $canvas.SetTextMatrix($x, $y)
-        $canvas.ShowText($text)
-        $canvas.EndText()
-    }
-
-    function Write-Check ([float]$x, [float]$y) {
-        Write-PdfText -x $x -y $y -text "X" -fontSize 10 -isBold $true
-    }
-
-    # Router using verified explicit coordinates per column
-    function Write-RowResult ([string]$status, [float]$passX, [float]$failX, [float]$notTestedX, [float]$y) {
+    function Write-RowResult ([string]$status, [string]$section, [float]$row) {
         switch ($status) {
-            "PASS"       { Write-Check -x $passX      -y $y }
-            "FAIL"       { Write-Check -x $failX      -y $y }
-            default      { Write-Check -x $notTestedX -y $y }
+            "PASS"       { $recap[$section + "_row" + [string]$row + "_p"] = "Yes" }
+            "FAIL"       { $recap[$section + "_row" + [string]$row + "_f"] = "Yes" }
+            default      { $recap[$section + "_row" + [string]$row + "_s"] = "Yes" }
         }
     }
 
     # =========================================================
     # 1. LEFT COLUMN: SECTION 2 (SCREEN & GRAPHICS)
     # =========================================================
-    Write-RowResult -status $deadPixelsPass    -passX 237 -failX 266 -notTestedX 296 -y 472
-    Write-RowResult -status $resRecordedStatus -passX 237 -failX 266 -notTestedX 296 -y 455
-    Write-RowResult -status $resStandardStatus -passX 236 -failX 266 -notTestedX 296 -y 437
-    Write-RowResult -status $gpuCardStatus     -passX 236 -failX 266 -notTestedX 296 -y 421
+    Write-RowResult -status $deadPixelsPass    -section scgr -row 1
+    Write-RowResult -status $resRecordedStatus -section scgr -row 2
+    Write-RowResult -status $resStandardStatus -section scgr -row 3
+    Write-RowResult -status $gpuCardStatus     -section scgr -row 4
 
     # =========================================================
     # 2. LEFT COLUMN: SECTION 3 (AUDIO & INPUT)
     # =========================================================
-    Write-RowResult -status $speakerPass     -passX 236 -failX 265 -notTestedX 295 -y 370
-    Write-RowResult -status $micPass         -passX 236 -failX 266 -notTestedX 296 -y 354
-    Write-RowResult -status $cameraPass      -passX 236 -failX 265 -notTestedX 295 -y 337
-    Write-RowResult -status $keyboardPass    -passX 236 -failX 265 -notTestedX 295 -y 320
-    Write-RowResult -status $trackpadPass    -passX 236 -failX 265 -notTestedX 295 -y 302
-    Write-RowResult -status $touchscreenPass -passX 236 -failX 265 -notTestedX 295 -y 286
-    Write-RowResult -status $fingerprintPass -passX 236 -failX 265 -notTestedX 295 -y 268
+    Write-RowResult -status $speakerPass     -section auin -row 1
+    Write-RowResult -status $micPass         -section auin -row 2
+    Write-RowResult -status $cameraPass      -section auin -row 3
+    Write-RowResult -status $keyboardPass    -section auin -row 4
+    Write-RowResult -status $trackpadPass    -section auin -row 5
+    Write-RowResult -status $touchscreenPass -section auin -row 6
+    Write-RowResult -status $fingerprintPass -section auin -row 7
 
     # =========================================================
     # 3. LEFT COLUMN: SECTION 4 (PORTS & CONNECTIVITY)
     # =========================================================
-    Write-RowResult -status $chargingPass   -passX 234 -failX 263 -notTestedX 294 -y 219
-    Write-RowResult -status $usbAPass       -passX 233 -failX 263 -notTestedX 294 -y 202
-    Write-RowResult -status $usbCPass       -passX 233 -failX 263 -notTestedX 293 -y 184
-    Write-RowResult -status $hdmiPass       -passX 232 -failX 263 -notTestedX 293 -y 167
-    Write-RowResult -status $wifiPass       -passX 232 -failX 263 -notTestedX 293 -y 149
-    Write-RowResult -status $bluetoothPass  -passX 232 -failX 263 -notTestedX 293 -y 131
+    Write-RowResult -status $chargingPass   -section poco -row 1
+    Write-RowResult -status $usbAPass       -section poco -row 2
+    Write-RowResult -status $usbCPass       -section poco -row 3
+    Write-RowResult -status $hdmiPass       -section poco -row 4
+    Write-RowResult -status $wifiPass       -section poco -row 5
+    Write-RowResult -status $bluetoothPass  -section poco -row 6
 
     # =========================================================
     # 4. LEFT COLUMN: SECTION 5 (OPERATING SYSTEM)
     # =========================================================
+# turn this into switch case
     Write-RowResult -status $win11Status    -passX 231 -failX 261 -notTestedX 291 -y 74
     Write-RowResult -status $win11ProStatus -passX 231 -failX 260 -notTestedX 290 -y 53
 
     # =========================================================
     # 5. RIGHT COLUMN: BRANDS, SPECS & OPTIONS
     # =========================================================
-    if ($brand -match "Lenovo") { Write-Check -x 406 -y 609 }
-    if ($brand -match "Dell")   { Write-Check -x 444 -y 609 }
-    if ($brand -match "HP")     { Write-Check -x 478 -y 609 }
-    if ($brand -match "Apple")  { Write-Check -x 514 -y 610 }
+    if ($brand -match "Lenovo") { $recap["lenovo"] = "Yes" }
+    if ($brand -match "Dell")   { $recap["dell"] = "Yes" }
+    if ($brand -match "HP")     { $recap["hp"] = "Yes" }
+    if ($brand -match "Apple")  { $recap["apple"] = "Yes" }
 
     # Specification Text Fields
-    Write-PdfText -x 370 -y 586 -text $model -fontSize 9 -isBold $true
-    Write-PdfText -x 370 -y 560 -text $cpu.Name -fontSize 8 -isBold $true
-    Write-PdfText -x 445 -y 540 -text "$ramGB" -fontSize 9 -isBold $true
-    Write-PdfText -x 445 -y 520 -text "$totalStorageGB" -fontSize 9 -isBold $true
+    $recap["model"] = $model
+    $recap["cpu"] = $cpu.Name
+    $recap["memory"] = $ramGB
+    $recap["storage"] = $totalStorageGB
 
     # Password / BIOS Checkbox
-    Write-Check -x 470 -y 489 # UNLOCK
+    $recap["bios_unlock"] = "Yes" # UNLOCK
 
     # Screen Condition Checkbox
     if ($deadPixelsPass -eq "PASS") { 
-        Write-Check -x 419 -y 464 # GOOD
+        $recap["screen_good"] = "Yes"
     } else { 
-        Write-Check -x 502 -y 464 # PIXELS
+        $recap["screen_pixels"] = "Yes"
     }
 
     # Touchscreen Checkbox
     if ($hasTouchscreen) { 
-        Write-Check -x 419 -y 437 # YES
+        $recap["touch_yes"] = "Yes" # YES
     } else { 
-        Write-Check -x 466 -y 437 # NO
+        $recap["touch_no"] = "Yes" # NO
     }
+
+    # Sell status
+    # [sell incomplete criteria]
+    # [else sell parts]
 
     # Battery Health Checkbox
     if ($batGood) { 
-        Write-Check -x 419 -y 410 # GOOD
+        $recap["batt_good"] = "Yes" # GOOD
     } elseif ($batFair) { 
-        Write-Check -x 462 -y 410 # FAIR
+        $recap["batt_fair"] = "Yes" # FAIR
     } else { 
-        Write-Check -x 501 -y 410 # POOR
+        $recap["batt_poor"] = "Yes" # POOR
     }
 
     # Screen Resolution Checkboxes
     if ($actualResStr -eq "1920 x 1080") {
-        Write-Check -x 334 -y 292 # FHD
+        $recap["fhd"] = "Yes" # FHD
     } elseif ($actualResStr -eq "3840 x 2160") {
-        Write-Check -x 334 -y 268 # UHD / 4K
+        $recap["uhd"] = "Yes" # UHD / 4K
     } else {
-        Write-Check -x 334 -y 245 # OTHER
-        Write-PdfText -x 375 -y 245 -text $actualResStr -fontSize 8 -isBold $true
+        $recap["scres_other_check"] = "Yes" # OTHER
+        $recap["scres_other_text"] = $actualResStr
     }
 
     # Additional Notes / Serial Info
-    $notes = "Serial: $($bios.SerialNumber) | GPU: $gpuName | OS: $($os.Caption)"
-    Write-PdfText -x 325 -y 180 -text $notes -fontSize 8
+    $notes = "Serial: $($bios.SerialNumber) | GPU: $gpuName"
+    $recap["serial"] = $notes
 
-    $stamper.Close()
-    $reader.Close()
-    $outputStream.Close()
+    # Generating .fdf file
+    $fielddata = ""
+    foreach ($entry in $recap.GetEnumerator()) {
+	$fielddata += "<< /T ($($entry.Key)) /V ($($entry.Value)) >>`n"
+    }
+    $datafdf = @"
+%FDF-1.2
+1 0 obj
+<< /FDF << /Fields [
+    $($fielddata)
+] >> >>
+endobj
+trailer
+<< /Root 1 0 R >>
+%%EOF
+"@
+
+    $datafdf | Out-File -FilePath "./data.fdf" -Encoding utf8
+    pdftk $templatePdf fill_form data.fdf output $outputPdf need_appearances
+    Remove-Item -Path data.fdf
 
     Write-Host "`n==========================================================================" -ForegroundColor Green
     Write-Host " SUCCESS! Quality Control PDF filled and saved to Desktop." -ForegroundColor Green

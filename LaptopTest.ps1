@@ -114,18 +114,20 @@ $wifiPass    = if ($wifiAdapter -and (Test-Connection -ComputerName "8.8.8.8" -C
 # ---------------------------------------------------------
 Write-Host "`n[2/4] Auto-Evaluating Battery Health..." -ForegroundColor Yellow
 
-$batStatic = Get-CimInstance -Namespace root\wmi -ClassName BatteryStaticData -ErrorAction SilentlyContinue
-$batFull   = Get-CimInstance -Namespace root\wmi -ClassName BatteryFullChargedCapacity -ErrorAction SilentlyContinue
+powercfg /batteryreport /xml
+[xml]$r = Get-Content battery-report.xml -Raw
+$battery = $r.BatteryReport.Batteries.Battery | Select-Object -First 1
 
 $batGood = $false; $batFair = $false; $batPoor = $false
-if ($batStatic -and $batFull -and $batStatic.DesignedCapacity -gt 0) {
-    $pct = [math]::Round(($batFull.FullChargedCapacity / $batStatic.DesignedCapacity) * 100, 1)
-    if ($pct -ge 80) { $batGood = $true }
-    elseif ($pct -ge 50) { $batFair = $true }
+if ($battery.DesignCapacity -gt 0) {
+    $bat_pct = [math]::Round(($battery.FullChargeCapacity / $battery.DesignCapacity) * 100, 1)
+    if ($bat_pct -ge 80) { $batGood = $true }
+    elseif ($bat_pct -ge 50) { $batFair = $true }
     else { $batPoor = $true }
 } else {
     $batGood = $true
 }
+Remove-Item -Path battery-report.xml
 
 # ---------------------------------------------------------
 # 3. INTERACTIVE HARDWARE TESTS
@@ -317,6 +319,7 @@ try {
     } else { 
         $recap["batt_poor"] = "Yes" # POOR
     }
+    $recap["batt_health_text"] = $bat_pct
 
     # Screen Resolution Checkboxes
     if ($actualResStr -eq "1920 x 1080") {

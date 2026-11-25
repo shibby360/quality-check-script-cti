@@ -12,6 +12,9 @@ if (-not $isAdmin) {
     Write-Warning "Running without Administrator privileges. Please run as Administrator for full diagnostic access."
 }
 
+# winget install dependencies
+winget install --id PDFLabs.PDFtk.Server
+
 # Dynamically detect USB Directory
 $usbPath = $PSScriptRoot
 if (-not $usbPath) { $usbPath = Get-Location }
@@ -354,6 +357,10 @@ try {
     # Additional Notes / Serial Info
     $recap["serial"] = "Serial: $($bios.SerialNumber)"
     $recap["gpu"] = "GPU: $gpuName"
+
+    # Name and Date
+    $recap["name"] = Read-Host "Name to be printed on PDF?"
+    $recap["date"] = Get-Date -Format "yyyy-MM-dd"
 
     # Generating .fdf file
     $fielddata = ""

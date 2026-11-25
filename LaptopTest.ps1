@@ -347,8 +347,8 @@ try {
     }
 
     # Additional Notes / Serial Info
-    $notes = "Serial: $($bios.SerialNumber) | GPU: $gpuName"
-    $recap["serial"] = $notes
+    $recap["serial"] = "Serial: $($bios.SerialNumber)"
+    $recap["gpu"] = "GPU: $gpuName"
 
     # Generating .fdf file
     $fielddata = ""

@@ -125,7 +125,22 @@ if ($battery.DesignCapacity -gt 0) {
     elseif ($bat_pct -ge 50) { $batFair = $true }
     else { $batPoor = $true }
 } else {
-    $batGood = $true
+    # Manual evaluation
+    Write-Host "Opening up HTML report"
+    powercfg /batteryreport
+    Start-Process "msedge.exe" -ArgumentList "--app=`"$((Join-Path $usbPath 'battery-report.html'))`""
+    # read full charge capacity and design capacity, then do the math
+    $fullcharge = Read-Host "What does the field Full Charge Capacity say(0 if it doesn't exist)?"
+    $design = Read-Host "What does the field Design Capacity say(0 if it doesn't exist)?"
+    if ($design -gt 0) {
+    	$bat_pct = [float]$fullcharge / [float]$design
+        if ($bat_pct -ge 80) { $batGood = $true }
+    	elseif ($bat_pct -ge 50) { $batFair = $true }
+    	else { $batPoor = $true }
+    } else {
+    	$bat_pct = "n/a"
+    }
+    Remove-Item -Path battery-report.html
 }
 Remove-Item -Path battery-report.xml
 
@@ -316,7 +331,7 @@ try {
         $recap["batt_good"] = "Yes" # GOOD
     } elseif ($batFair) { 
         $recap["batt_fair"] = "Yes" # FAIR
-    } else { 
+    } elseif ($batPoor) { 
         $recap["batt_poor"] = "Yes" # POOR
     }
     $recap["batt_health_text"] = $bat_pct

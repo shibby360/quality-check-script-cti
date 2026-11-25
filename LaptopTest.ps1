@@ -141,8 +141,10 @@ if ($battery.DesignCapacity -gt 0) {
     	$bat_pct = "n/a"
     }
     Remove-Item -Path battery-report.html
+    Write-Host "Cleaned up battery-report.html"
 }
 Remove-Item -Path battery-report.xml
+Write-Host "Cleaned up battery-report.xml"
 
 # ---------------------------------------------------------
 # 3. INTERACTIVE HARDWARE TESTS
@@ -150,7 +152,7 @@ Remove-Item -Path battery-report.xml
 
 # --- DISPLAY TEST ---
 Write-Host "`n[3/4] Screen & Display Test" -ForegroundColor Yellow
-Read-Host "Press ENTER to launch full-screen color sweep (Press SPACE/ENTER to switch colors, ESC to exit)..."
+Read-Host "Press ENTER to launch full-screen color sweep (CLICK to progress through colors)..."
 
 Add-Type -AssemblyName System.Drawing
 $testColors = @([System.Drawing.Color]::Red, [System.Drawing.Color]::Green, [System.Drawing.Color]::Blue, [System.Drawing.Color]::White, [System.Drawing.Color]::Black)
@@ -283,13 +285,16 @@ try {
     Write-RowResult -status $hdmiPass       -section poco -row 4
     Write-RowResult -status $wifiPass       -section poco -row 5
     Write-RowResult -status $bluetoothPass  -section poco -row 6
-
-    # =========================================================
-    # 4. LEFT COLUMN: SECTION 5 (OPERATING SYSTEM)
-    # =========================================================
-# turn this into switch case
-    Write-RowResult -status $win11Status    -passX 231 -failX 261 -notTestedX 291 -y 74
-    Write-RowResult -status $win11ProStatus -passX 231 -failX 260 -notTestedX 290 -y 53
+    
+    # OS stuff
+    switch($win11Status) {
+    	"PASS" { $recap["os_w11_installed"] = "Yes" }
+    	"FAIL" { $recap["os_w11_not"] = "Yes" }
+    }
+    switch($win11ProStatus) {
+    	"PASS" { $recap["os_w11pro_installed"] = "Yes" }
+    	"FAIL" { $recap["os_w11pro_not"] = "Yes" }
+    }
 
     # =========================================================
     # 5. RIGHT COLUMN: BRANDS, SPECS & OPTIONS
